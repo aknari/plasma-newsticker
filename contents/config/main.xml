@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
+  <kcfgfile name=""/>
+
+  <group name="General">
+    <entry name="scrollSpeed" type="Int">
+      <label>Scroll speed in pixels per second</label>
+      <default>30</default>
+      <min>10</min>
+      <max>100</max>
+    </entry>
+    <entry name="showIcons" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="updateInterval" type="Int">
+      <default>15</default>
+    </entry>
+  </group>
+
+  <group name="Appearance">
+    <entry name="textColor" type="Color">
+      <default>theme</default>
+    </entry>
+    <entry name="transparentBackground" type="Bool">
+      <label>Use transparent background</label>
+      <default>false</default>
+    </entry>
+    <entry name="fontSize" type="Int">
+      <default>11</default>
+    </entry>
+    <entry name="fontFamily" type="String">
+      <default></default>
+    </entry>
+  </group>
+
+  <group name="Feeds">
+    <entry name="feedList" type="StringList">
+      <default></default>
+    </entry>
+    <entry name="maxItems" type="Int">
+      <default>15</default>
+    </entry>
+  </group>
+</kcfg>
