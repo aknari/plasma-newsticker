@@ -2,7 +2,8 @@
     "KPlugin": {
         "Authors": [
             {
-                "Email": "tomas.bautista@gmail.com",
+                "Email": "tomas.bautista@gmail.com", 
+                "Url": "https://github.com/your-username",
                 "Name": "T. Bautista"
             }
         ],
@@ -19,10 +20,11 @@
         "License": "GPL",
         "Name": "News Ticker",
         "Version": "1.0",
-        "Website": ""
+        "Website": "https://github.com/aknari/plasma-newsticker"
     },
     "KPackageStructure": "Plasma/Applet",
     "X-Plasma-API": "declarativeappletscript",
     "X-Plasma-API-Minimum-Version": "6.0",
-    "X-Plasma-MainScript": "ui/main.qml"
+    "X-Plasma-MainScript": "ui/main.qml",
+    "X-Plasma-MainConfiguration": "contents/ui/config.qml"
 }

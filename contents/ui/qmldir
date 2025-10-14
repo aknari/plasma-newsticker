@@ -1,0 +1,2 @@
+module org.kde.plasma.newsticker.internal
+singleton ClipboardHelper 1.0 ClipboardHelper.qml

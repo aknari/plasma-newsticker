@@ -18,6 +18,24 @@
     <entry name="updateInterval" type="Int">
       <default>15</default>
     </entry>
+    <entry name="blinkNewItems" type="Bool">
+      <label>Blink new items</label>
+      <default>false</default>
+    </entry>
+    <entry name="expanding" type="Bool">
+      <label>Expand to fill available panel space</label>
+      <default>true</default>
+    </entry>
+    <entry name="length" type="Int">
+      <label>Fixed length when not expanding</label>
+      <default>200</default>
+    </entry>
+    <entry name="fontSize" type="Int">
+      <default>11</default>
+    </entry>
+    <entry name="fontFamily" type="String">
+      <default></default>
+    </entry>
   </group>
 
   <group name="Appearance">
@@ -27,12 +45,6 @@
     <entry name="transparentBackground" type="Bool">
       <label>Use transparent background</label>
       <default>false</default>
-    </entry>
-    <entry name="fontSize" type="Int">
-      <default>11</default>
-    </entry>
-    <entry name="fontFamily" type="String">
-      <default></default>
     </entry>
   </group>
 
