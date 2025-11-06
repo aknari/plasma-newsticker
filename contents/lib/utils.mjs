@@ -100,22 +100,86 @@ export function decodeHtmlEntities(text) {
     return decodeHtmlEntitiesRobust(normalized);
 }
 
+// --- Funciones de Truncamiento Inteligente ---
+
+function smartTruncate(fullText, maxLength) {
+    if (!fullText) {
+        return "";
+    }
+    if (fullText.length <= maxLength) {
+        // Si el texto no se trunca, asegurarse de que termina con un punto.
+        const trimmedText = fullText.trim();
+        if (trimmedText.endsWith('.') || trimmedText.endsWith('…') || trimmedText.endsWith('?') || trimmedText.endsWith('!')) {
+            return trimmedText;
+        }
+        return trimmedText + '.';
+    }
+
+    // 1. Encontrar el primer espacio DESPUÉS del límite para no cortar palabras.
+    let cutIndex = fullText.indexOf(' ', maxLength);
+
+    // Si no hay espacios después, significa que estamos en la última palabra.
+    // Buscamos hacia atrás para respetar la palabra actual.
+    if (cutIndex === -1) {
+        cutIndex = fullText.lastIndexOf(' ');
+    }
+
+    // Si no hay ningún espacio en todo el texto, cortamos a la fuerza.
+    if (cutIndex === -1) {
+        return fullText.substring(0, maxLength) + "…";
+    }
+
+    // 2. Truncar el texto hasta el final de la palabra encontrada.
+    let truncatedText = fullText.substring(0, cutIndex);
+
+    // 3. Determinar si el texto truncado ya es el texto completo.
+    // Usamos trim() para ignorar espacios finales.
+    if (truncatedText.trim().length >= fullText.trim().length) {
+        // Si el texto truncado es igual o más largo que el original (por los espacios),
+        // significa que hemos incluido todo. Terminamos con un punto.
+        return fullText.trim() + ".";
+    } else {
+        // Si todavía falta texto, usamos puntos suspensivos.
+        return truncatedText + "…";
+    }
+}
+
+export function truncateTitleForTooltip(text) {
+    if (!text) return "";
+    const maxLength = 35;
+    return smartTruncate(text, maxLength);
+}
+
+export function formatDescriptionForTooltip(htmlText) {
+    if (!htmlText) return "";
+
+    let decoded = decodeHtmlEntities(htmlText);
+    let plainText = decoded.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    
+    const maxLength = 300;
+    return smartTruncate(plainText, maxLength);
+}
+
 // --- Sección de Parsing de Feeds ---
 
-function parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, pubDateRegex, feedUrl, maxItems, feedTimestamps) {
-    var items = xml.match(itemRegex) || [];
+function parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, pubDateRegex, descriptionRegex, feedUrl, maxItems, feedTimestamps) {
+    // Usamos una nueva instancia de la RegExp para evitar problemas con el estado de 'lastIndex' en búsquedas globales.
+    var items = xml.match(new RegExp(itemRegex)) || [];
     var newItems = [];
 
     for (var i = 0; i < Math.min(items.length, maxItems); i++) {
         var item = items[i].replace(/\s+/g, ' ').trim();
-        var titleMatch = item.match(titleRegex);
+        var titleMatch = item.match(new RegExp(titleRegex));
         var linkMatch = item.match(linkRegex) || item.match(guidRegex);
         var pubDateMatch = item.match(pubDateRegex);
+        var descriptionMatch = descriptionRegex ? item.match(new RegExp(descriptionRegex)) : null;
 
         if (titleMatch && titleMatch[1] && titleMatch[1].trim()) {
             var title = decodeHtmlEntities(titleMatch[1].trim());
             var link = (linkMatch && linkMatch[1]) ? linkMatch[1].trim() : "";
             var pubDate = (pubDateMatch && pubDateMatch[1]) ? new Date(pubDateMatch[1]).getTime() : new Date().getTime();
+            var description = (descriptionMatch && descriptionMatch[1]) ? descriptionMatch[1].trim() : "";
+            var summary = formatDescriptionForTooltip(description);
 
             var isNew = false;
             if (!feedTimestamps[feedUrl]) {
@@ -131,6 +195,8 @@ function parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, p
             newItems.push({
                 title: title,
                 link: link,
+                summary: summary,
+                description: description,
                 isNew: isNew,
                 isLast: false
             });
@@ -140,21 +206,25 @@ function parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, p
 }
 
 function parseRssStandard(xml, feedUrl, maxItems, feedTimestamps) {
-    var itemRegex = /<item[^>]*>[\s\S]*?<\/item>/g;
-    var titleRegex = /<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i;
-    var linkRegex = /<link[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i;
-    var guidRegex = /<guid[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/guid>/i;
-    var pubDateRegex = /<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i;
+    // Definimos las regex aquí para que se recreen en cada llamada.
+    const itemRegex = /<item[^>]*>[\s\S]*?<\/item>/g;
+    const titleRegex = /<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i;
+    const linkRegex = /<link[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i;
+    const guidRegex = /<guid[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/guid>/i;
+    const pubDateRegex = /<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i;
+    // Captura <content:encoded> o <description>.
+    const descriptionRegex = /<(?:content:encoded|description)[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:content:encoded|description)>/i;
 
-    return parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, pubDateRegex, feedUrl, maxItems, feedTimestamps);
+    return parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, pubDateRegex, descriptionRegex, feedUrl, maxItems, feedTimestamps);
 }
 
 function parseRssMultiline(xml, feedUrl, maxItems, feedTimestamps) {
-    var itemRegex = /<item[^>]*>[\s\S]*?<\/item>/g;
-    var titleRegex = /<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i;
-    var linkRegex = /<link[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i;
-    var guidRegex = /<guid[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/guid>/i;
-    var pubDateRegex = /<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i;
+    const itemRegex = /<item[^>]*>[\s\S]*?<\/item>/g;
+    const titleRegex = /<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i;
+    const linkRegex = /<link[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i;
+    const guidRegex = /<guid[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/guid>/i;
+    const pubDateRegex = /<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i;
+    const descriptionRegex = /<(?:content:encoded|description)[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:content:encoded|description)>/i;
 
     var items = xml.match(itemRegex) || [];
     var newItems = [];
@@ -170,6 +240,9 @@ function parseRssMultiline(xml, feedUrl, maxItems, feedTimestamps) {
                 var pubDateMatch = item.match(pubDateRegex);
                 var link = (linkMatch && linkMatch[1]) ? linkMatch[1].trim() : "";
                 var pubDate = (pubDateMatch && pubDateMatch[1]) ? new Date(pubDateMatch[1]).getTime() : new Date().getTime();
+                var descriptionMatch = item.match(descriptionRegex);
+                var description = (descriptionMatch && descriptionMatch[1]) ? descriptionMatch[1].trim() : "";
+                var summary = formatDescriptionForTooltip(description);
 
                 var isNew = false;
                 if (!feedTimestamps[feedUrl]) {
@@ -182,7 +255,7 @@ function parseRssMultiline(xml, feedUrl, maxItems, feedTimestamps) {
                 feedTimestamps[feedUrl] = feedTimestamps[feedUrl] || {};
                 feedTimestamps[feedUrl][title] = pubDate;
 
-                newItems.push({ title: title, link: link, isNew: isNew, isLast: false });
+                newItems.push({ title: title, link: link, description: description, summary: summary, isNew: isNew, isLast: false });
             }
         }
     }
@@ -190,27 +263,29 @@ function parseRssMultiline(xml, feedUrl, maxItems, feedTimestamps) {
 }
 
 function parseRssAlternative(xml, feedUrl, maxItems, feedTimestamps) {
-    var itemRegex = /<entry[^>]*>[\s\S]*?<\/entry>/g;
-    var titleRegex = /<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i;
-    var linkRegex = /<link[^>]*href="([^"]*)"[^>]*/i;
-    var guidRegex = /<id[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/id>/i;
-    var pubDateRegex = /<updated[^>]*>([\s\S]*?)<\/updated>/i;
+    const itemRegex = /<entry[^>]*>[\s\S]*?<\/entry>/g;
+    const titleRegex = /<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i;
+    const linkRegex = /<link[^>]*href="([^"]*)"[^>]*/i;
+    const guidRegex = /<id[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/id>/i;
+    const pubDateRegex = /<updated[^>]*>([\s\S]*?)<\/updated>/i;
+    const descriptionRegex = /<summary[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/summary>/i;
 
-    return parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, pubDateRegex, feedUrl, maxItems, feedTimestamps);
+    return parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, pubDateRegex, descriptionRegex, feedUrl, maxItems, feedTimestamps);
 }
 
 function parseAtomFeeds(xml, feedUrl, maxItems, feedTimestamps) {
-    var itemRegex = /<entry[^>]*>[\s\S]*?<\/entry>/g;
-    var titleRegex = /<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i;
-    var linkRegex = /<link[^>]*href="([^"]*)"[^>]*>/i;
-    var guidRegex = /<id[^>]*>([\s\S]*?)<\/id>/i;
-    var pubDateRegex = /<published[^>]*>([\s\S]*?)<\/published>/i;
+    const itemRegex = /<entry[^>]*>[\s\S]*?<\/entry>/g;
+    const titleRegex = /<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i;
+    const linkRegex = /<link[^>]*href="([^"]*)"[^>]*>/i;
+    const guidRegex = /<id[^>]*>([\s\S]*?)<\/id>/i;
+    const pubDateRegex = /<published[^>]*>([\s\S]*?)<\/published>/i;
+    const descriptionRegex = /<summary[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/summary>/i;
 
-    return parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, pubDateRegex, feedUrl, maxItems, feedTimestamps);
+    return parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, pubDateRegex, descriptionRegex, feedUrl, maxItems, feedTimestamps);
 }
 
 function parseMinimalXml(xml, feedUrl, maxItems) {
-    var titleRegex = /<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/gi;
+    const titleRegex = /<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/gi;
     var matches = xml.match(titleRegex) || [];
     var items = [];
     var addedCount = 0;
@@ -227,6 +302,8 @@ function parseMinimalXml(xml, feedUrl, maxItems) {
                 items.push({
                     title: decodeHtmlEntities(cleanTitle),
                     link: "",
+                    summary: "", // No hay resumen en este modo
+                    description: "", // No hay descripción en este modo
                     isNew: true,
                     isLast: false
                 });
@@ -263,8 +340,8 @@ export function parseFeedWithMultipleStrategies(xml, feedUrl, maxItems, feedTime
 
 // --- Sección de Utilidades de Favicon ---
 
-export function getFaviconUrlCandidates(feedUrl) {
-    if (!feedUrl) {
+export function getFaviconUrlCandidates(feedUrl, size = 32) { // Aceptamos un parámetro de tamaño
+    if (!feedUrl || !size) {
         return [];
     }
 
@@ -280,8 +357,8 @@ export function getFaviconUrlCandidates(feedUrl) {
 
         // Devolver la lista de candidatos en orden de preferencia
         return [
-            "https://logo.clearbit.com/" + domain + "?size=32",
-            "https://www.google.com/s2/favicons?domain=" + domain + "&sz=32",
+            "https://logo.clearbit.com/" + domain + "?size=" + size,
+            "https://www.google.com/s2/favicons?domain=" + domain + "&sz=" + size,
             "https://favicon.yandex.net/favicon/" + domain,
             "https://" + domain + "/favicon.ico"
         ];

@@ -22,6 +22,10 @@
       <label>Blink new items</label>
       <default>false</default>
     </entry>
+    <entry name="showTooltips" type="Bool">
+      <label>Show tooltips with details</label>
+      <default>true</default>
+    </entry>
     <entry name="expanding" type="Bool">
       <label>Expand to fill available panel space</label>
       <default>true</default>

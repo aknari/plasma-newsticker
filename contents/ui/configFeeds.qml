@@ -3,12 +3,48 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-Kirigami.FormLayout {
+Kirigami.Page {
     id: root
 
-    // Declaramos la propiedad de configuración que esta pestaña necesita.
-    // El ConfigModel inyectará aquí la lista de feeds.
-    property var cfg_feedList: []
+    // Se declaran TODAS las propiedades del kcfg para que ConfigModel las inyecte.
+    property int cfg_scrollSpeed
+    property bool cfg_showIcons
+    property color cfg_textColor
+    property int cfg_fontSize
+    property string cfg_fontFamily
+    property int cfg_maxItems
+    property int cfg_updateInterval
+    property bool cfg_transparentBackground
+    property bool cfg_blinkNewItems
+    property bool cfg_showTooltips
+    property var cfg_feedList
+    property bool cfg_expanding
+    property int cfg_length
+
+    property int cfg_scrollSpeedDefault
+    property bool cfg_showIconsDefault
+    property color cfg_textColorDefault
+    property int cfg_fontSizeDefault
+    property string cfg_fontFamilyDefault
+    property int cfg_maxItemsDefault
+    property int cfg_updateIntervalDefault
+    property bool cfg_transparentBackgroundDefault
+    property bool cfg_blinkNewItemsDefault
+    property bool cfg_showTooltipsDefault
+    property var cfg_feedListDefault
+    property bool cfg_expandingDefault
+    property int cfg_lengthDefault
+
+    // Función para normalizar una URL para comparación
+    function normalizeUrl(url) {
+        if (!url) return "";
+        return url.trim()
+                  .toLowerCase()
+                  .replace(/^https?:\/\//, '') // Eliminar http:// o https://
+                  .replace(/^www\./, '')       // Eliminar www.
+                  .replace(/\/$/, '');         // Eliminar barra final
+    }
+
 
     function generateOpml() {
         let opml = '<?xml version="1.0" encoding="UTF-8"?>\n';
@@ -86,26 +122,29 @@ Kirigami.FormLayout {
                         icon.name: "go-up"
                         enabled: index > 0
                         onClicked: {
-                            let temp = cfg_feedList.slice() // Crear una copia
-                            temp.splice(index - 1, 0, temp.splice(index, 1)[0])
-                            cfg_feedList = temp // Asignar la nueva copia
+                            // La forma correcta de acceder a la lista desde el delegate
+                            let temp = feedListView.model.slice();
+                            const item = temp.splice(index, 1)[0]; // 2. Mover elemento en la copia
+                            temp.splice(index - 1, 0, item);
+                            cfg_feedList = temp; // 3. Reasignar para notificar al ConfigModel y a la vista
                         }
                     }
                     QQC2.Button {
                         icon.name: "go-down"
                         enabled: index < feedListView.count - 1
                         onClicked: {
-                            let temp = cfg_feedList.slice() // Crear una copia
-                            temp.splice(index + 1, 0, temp.splice(index, 1)[0])
-                            cfg_feedList = temp // Asignar la nueva copia
+                            let temp = feedListView.model.slice();
+                            const item = temp.splice(index, 1)[0];
+                            temp.splice(index + 1, 0, item);
+                            cfg_feedList = temp;
                         }
                     }
                     QQC2.Button {
                         icon.name: "list-remove"
                         onClicked: {
-                            let temp = cfg_feedList.slice() // Crear una copia
-                            temp.splice(index, 1)
-                            cfg_feedList = temp // Asignar la nueva copia
+                            let temp = feedListView.model.slice();
+                            temp.splice(index, 1);
+                            cfg_feedList = temp;
                         }
                     }
                 }
@@ -126,9 +165,21 @@ Kirigami.FormLayout {
                 text: i18n("Add")
                 enabled: newFeedInput.text.length > 0
                 onClicked: {
-                    // Crear un nuevo array concatenando el antiguo con el nuevo elemento
-                    cfg_feedList = cfg_feedList.concat([newFeedInput.text])
-                    newFeedInput.text = ""
+                    const newUrl = newFeedInput.text.trim();
+                    if (newUrl.length === 0) return;
+
+                    const normalizedNewUrl = normalizeUrl(newUrl);
+                    const existingNormalizedUrls = (cfg_feedList || []).map(normalizeUrl);
+
+                    if (existingNormalizedUrls.includes(normalizedNewUrl)) {
+                        // La URL ya existe, limpiar y no hacer nada
+                        newFeedInput.text = "";
+                        return;
+                    }
+
+                    // Añadir la nueva URL
+                    cfg_feedList = (cfg_feedList || []).concat([newUrl]);
+                    newFeedInput.text = "";
                 }
             }
 
