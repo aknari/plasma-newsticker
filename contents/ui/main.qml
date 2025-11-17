@@ -70,6 +70,7 @@ PlasmoidItem {
         return 16;
     }
     readonly property string newsSeparator: "•"
+    readonly property bool newsSeparatorBold: true
     readonly property int newsSeparatorMargin: Kirigami.Units.gridUnit * 1.2
     property bool horizontal: Plasmoid.formFactor !== PlasmaCore.Types.Vertical
     property bool expanding: plasmoid.configuration.expanding || false
@@ -512,7 +513,7 @@ PlasmoidItem {
                                         id: separatorContainer; height: parent.height; visible: !modelData.isLast
                                         PlasmaComponents.Label {
                                             text: root.newsSeparator; color: root.textColor
-                                            font { pointSize: root.fontSize; family: root.fontFamily }
+                                            font { pointSize: root.fontSize; family: root.fontFamily; bold: root.newsSeparatorBold }
                                             opacity: 0.7; Layout.alignment: Qt.AlignVCenter
                                             Layout.leftMargin: root.newsSeparatorMargin; Layout.rightMargin: root.newsSeparatorMargin
                                         }
@@ -586,7 +587,7 @@ PlasmoidItem {
         target: plasmoid
 
         // Se dispara cuando el diálogo de configuración se abre/cierra
-        onUserConfiguringChanged: {
+        function onUserConfiguringChanged() {
             // Nos interesa solo cuando se cierra (userConfiguring -> false)
             if (!plasmoid.userConfiguring) {
                 if (_debugMode) console.log("👋 El diálogo de configuración se ha cerrado.");

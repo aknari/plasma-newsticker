@@ -100,6 +100,13 @@ export function decodeHtmlEntities(text) {
     return decodeHtmlEntitiesRobust(normalized);
 }
 
+export function sanitizeText(text) {
+    if (!text) return '';
+    // Elimina caracteres fuera de los rangos comunes (Basic Latin, Latin-1 Supplement, y General Punctuation)
+    // Esto debería eliminar caracteres extraños como los del script tibetano (script 17)
+    return text.replace(/[^\u0020-\u007E\u00A0-\u00FF\u2000-\u206F]/g, '');
+}
+
 // --- Funciones de Truncamiento Inteligente ---
 
 function smartTruncate(fullText, maxLength) {
@@ -175,7 +182,7 @@ function parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, p
         var descriptionMatch = descriptionRegex ? item.match(new RegExp(descriptionRegex)) : null;
 
         if (titleMatch && titleMatch[1] && titleMatch[1].trim()) {
-            var title = decodeHtmlEntities(titleMatch[1].trim());
+            var title = sanitizeText(decodeHtmlEntities(titleMatch[1].trim()));
             var link = (linkMatch && linkMatch[1]) ? linkMatch[1].trim() : "";
             var pubDate = (pubDateMatch && pubDateMatch[1]) ? new Date(pubDateMatch[1]).getTime() : new Date().getTime();
             var description = (descriptionMatch && descriptionMatch[1]) ? descriptionMatch[1].trim() : "";
@@ -235,7 +242,7 @@ function parseRssMultiline(xml, feedUrl, maxItems, feedTimestamps) {
         if (titleMatch && titleMatch[1]) {
             var cleanTitle = titleMatch[1].replace(/\s+/g, ' ').trim();
             if (cleanTitle.length > 0) {
-                var title = decodeHtmlEntities(cleanTitle);
+                var title = sanitizeText(decodeHtmlEntities(cleanTitle));
                 var linkMatch = item.match(linkRegex) || item.match(guidRegex);
                 var pubDateMatch = item.match(pubDateRegex);
                 var link = (linkMatch && linkMatch[1]) ? linkMatch[1].trim() : "";
@@ -300,7 +307,7 @@ function parseMinimalXml(xml, feedUrl, maxItems) {
 
             if (cleanTitle.length > 2 && cleanTitle !== channelTitle) {
                 items.push({
-                    title: decodeHtmlEntities(cleanTitle),
+                    title: sanitizeText(decodeHtmlEntities(cleanTitle)),
                     link: "",
                     summary: "", // No hay resumen en este modo
                     description: "", // No hay descripción en este modo
