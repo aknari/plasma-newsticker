@@ -10,7 +10,9 @@ import "../lib/utils.mjs" as Utils
 import "../lib/network.mjs" as Network
 
 PlasmoidItem {
-    readonly property bool _debugMode: false // Cambiar a 'true' para ver todos los logs
+     // Cambiar a 'true' para ver todos los logs
+    readonly property bool _debugMode: false
+    
     id: root
 
     Plasmoid.backgroundHints: plasmoid.configuration.transparentBackground ? "NoBackground" : "StandardBackground"
@@ -511,11 +513,19 @@ PlasmoidItem {
                                     }
                                     RowLayout {
                                         id: separatorContainer; height: parent.height; visible: !modelData.isLast
+
                                         PlasmaComponents.Label {
-                                            text: root.newsSeparator; color: root.textColor
-                                            font { pointSize: root.fontSize; family: root.fontFamily; bold: root.newsSeparatorBold }
-                                            opacity: 0.7; Layout.alignment: Qt.AlignVCenter
-                                            Layout.leftMargin: root.newsSeparatorMargin; Layout.rightMargin: root.newsSeparatorMargin
+                                            text: root.newsSeparator
+                                            color: root.textColor
+                                            font {
+                                                pointSize: root.fontSize
+                                                family: '"Noto Sans", "sans-serif"'
+                                                bold: root.newsSeparatorBold
+                                            }
+                                            opacity: 0.7
+                                            Layout.alignment: Qt.AlignVCenter
+                                            Layout.leftMargin: root.newsSeparatorMargin
+                                            Layout.rightMargin: root.newsSeparatorMargin
                                         }
                                     }
                                 }
