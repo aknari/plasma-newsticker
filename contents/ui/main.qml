@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import Qt.labs.platform as Platform
 import org.kde.plasma.plasmoid
-import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 import "../lib/utils.mjs" as Utils
@@ -74,7 +73,7 @@ PlasmoidItem {
     readonly property string newsSeparator: "•"
     readonly property bool newsSeparatorBold: true
     readonly property int newsSeparatorMargin: Kirigami.Units.gridUnit * 1.2
-    property bool horizontal: Plasmoid.formFactor !== PlasmaCore.Types.Vertical
+    property bool horizontal: Plasmoid.formFactor !== 2 // 2 is Vertical in Plasma::Types::FormFactor
     property bool expanding: plasmoid.configuration.expanding || false
 
     property GridLayout panelLayout: {
@@ -289,6 +288,7 @@ PlasmoidItem {
         failedFeedAttempts = 0;
         allFeedsFailed = false;
         retryFailedFeedsTimer.stop();
+        retryFailedFeedsTimer.stop();
         retryCount = 0; // Reinicia el contador de reintentos en un éxito
         newsModel = items;
         isBusy = false;
@@ -318,13 +318,25 @@ PlasmoidItem {
         }
     }
 
-    function resetAndInitialize() {
-        if (isBusy) {
-            if (_debugMode) console.log("⚠️ Ignorando reinicio, ya hay un proceso en curso.");
-            return;
-        }
+    function resetAndInitialize(isRetry = false) {
         if (_debugMode) console.log("🚀 Ejecutando inicialización completa...");
+        
+        // Forzamos el reset de banderas críticas
         isBusy = true;
+        
+        // Limpieza segura de la UI viva
+        if (liveUi) {
+            try {
+                // Intentamos detener cualquier animación en curso si es posible
+                if (typeof liveUi.stopAnimations === 'function') {
+                    liveUi.stopAnimations();
+                }
+            } catch (e) {
+                console.warn("Error al intentar detener liveUi:", e);
+            }
+            // No ponemos liveUi a null aquí, porque la referencia puede seguir siendo válida para el motor QML.
+            // Simplemente asumimos que vamos a reconstruir el estado.
+        }
 
         root.faviconOpacity = 0;
         root.currentFaviconUrl = "image://icon/applications-internet";
@@ -335,9 +347,12 @@ PlasmoidItem {
         failedFeedAttempts = 0;
         preloadedData = null;
         retryFailedFeedsTimer.stop();
-        retryCount = 0;
+        if (!isRetry) {
+            retryCount = 0;
+        }
         transitionTimer.stop();
         feedChangeTimer.stop();
+        watchdogTimer.stop(); // Aseguramos que el watchdog no salte durante el reset
 
         newsModel = [];
         
@@ -349,7 +364,8 @@ PlasmoidItem {
         if (feeds && feeds.length > 0 && feeds.some(feed => feed && feed.trim() !== '')) {
             if (_debugMode) console.log("✅ Feeds encontrados. Iniciando carga del primer feed.");
             isInitialized = true;
-            loadCurrentFeed();
+            // Damos un pequeño respiro antes de cargar para dejar que el loop de eventos procese
+            Qt.callLater(loadCurrentFeed);
         } else {
             allFeedsFailed = true;
             emptyStateMessage = i18n("No feeds configured. Please add feeds in the settings.");
@@ -361,11 +377,11 @@ PlasmoidItem {
     function scheduleRetry() {
         let newInterval;
         switch (retryCount) {
-            case 0: newInterval = 15000; break;    // 15 segundos
-            case 1: newInterval = 30000; break;    // 30 segundos
-            case 2: newInterval = 60000; break;    // 1 minuto
-            case 3: newInterval = 300000; break;   // 5 minutos
-            default: newInterval = 600000; break;  // 10 minutos
+            case 0: newInterval = 5000; break;     // 5 segundos (primer intento)
+            case 1: newInterval = 10000; break;    // 10 segundos
+            case 2: newInterval = 15000; break;    // 15 segundos
+            case 3: newInterval = 60000; break;    // 1 minuto
+            default: newInterval = 60000; break;   // 1 minuto (intentos posteriores)
         }
         retryCount++;
         retryFailedFeedsTimer.interval = newInterval;
@@ -386,14 +402,17 @@ PlasmoidItem {
         repeat: false
         onTriggered: { if (_debugMode) console.log("💥 [CHIVATO] ¡feedChangeTimer disparado! Llamando a startFeedTransition()."); startFeedTransition(); }
     }
-    Timer { id: retryFailedFeedsTimer; repeat: false; onTriggered: resetAndInitialize() }
+    Timer { id: retryFailedFeedsTimer; repeat: false; onTriggered: resetAndInitialize(true) }
     Timer {
         id: watchdogTimer
-        interval: 15000 // 15 segundos
+        interval: 30000 // Aumentamos a 30 segundos para dar más margen en redes lentas
         repeat: false
         onTriggered: {
             console.warn("🐶 [WATCHDOG] La transición del feed no se completó a tiempo. Forzando reinicio completo.");
-            resetAndInitialize();
+            // Solo reiniciamos si realmente estamos bloqueados (isBusy es true)
+            if (isBusy) {
+                resetAndInitialize(true);
+            }
         }
     }
 
@@ -417,8 +436,8 @@ PlasmoidItem {
                 id: container; anchors.fill: parent; clip: true; color: "transparent"
 
                 // Implementación de la API (funciones internas)
-                function stopScrolling() { scrollTimer.stop(); }
-                function startScrolling() { if (_debugMode) console.log("[CHIVATO] tickerUiComponent: Arrancando scrollTimer."); scrollTimer.start(); }
+                function stopScrolling() { scrollAnimation.stop(); }
+                function startScrolling() { if (_debugMode) console.log("[CHIVATO] tickerUiComponent: Arrancando scrollAnimation."); scrollAnimation.start(); }
                 function updateNewsRow() {
                     newsRow.x = newsContainer.width;
                     startTransitionAnimations(1.0);
@@ -537,11 +556,12 @@ PlasmoidItem {
                         }
                     }
                     NumberAnimation { id: newsOpacityAnimation; target: newsContainer; property: "opacity"; duration: 300; from: 0; to: 1; easing.type: Easing.InOutQuad }
-                    Timer {
-                        id: scrollTimer; interval: 16; running: false; repeat: true
+                    FrameAnimation {
+                        id: scrollAnimation; running: false
                         onTriggered: {
                             if (!newsRow || newsRow.totalWidth <= 0) return;
-                            var pixelsPerFrame = (root.currentScrollSpeed / 1000) * interval;
+                            // frameTime is in seconds
+                            var pixelsToMove = root.currentScrollSpeed * frameTime;
                             var endOfScroll = newsRow.x + newsRow.totalWidth < -50;
                             var minTimeElapsed = (new Date().getTime() - feedStartTime >= minDisplayTime);
 
@@ -554,7 +574,7 @@ PlasmoidItem {
                                     // Usamos un temporizador para no inundar el log
                                     if (!scrollDebugTimer.running) scrollDebugTimer.start();
                                 }
-                                newsRow.x -= pixelsPerFrame;
+                                newsRow.x -= pixelsToMove;
                             }
                         }
                     }
@@ -609,7 +629,7 @@ PlasmoidItem {
 
                 if (currentFeedsJSON !== lastAppliedFeedsJSON) {
                     if (_debugMode) console.log("✅ La lista de feeds ha cambiado. Reiniciando para aplicar cambios.");
-                    resetAndInitialize();
+                    resetAndInitialize(false);
                 } else {
                     if (_debugMode) console.log("❌ No se detectaron cambios en la lista de feeds. No se requiere reinicio.");
                 }
@@ -633,6 +653,6 @@ PlasmoidItem {
 
     Component.onCompleted: {
         if (_debugMode) console.log("Plasmoid cargado. Programando primer intento de inicialización.");
-        resetAndInitialize();
+        resetAndInitialize(false);
     }
 }
