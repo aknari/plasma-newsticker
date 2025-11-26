@@ -41,7 +41,7 @@ function decodeHtmlEntitiesRobust(text) {
     }
 
     // Luego entidades numéricas decimales
-    text = text.replace(/&#(\d+);/g, function(match, dec) {
+    text = text.replace(/&#(\d+);/g, function (match, dec) {
         var codePoint = parseInt(dec, 10);
         if (codePoint > 0 && codePoint <= 0x10FFFF) {
             try {
@@ -55,7 +55,7 @@ function decodeHtmlEntitiesRobust(text) {
     });
 
     // Entidades hexadecimales
-    text = text.replace(/&#x([0-9a-fA-F]+);/g, function(match, hex) {
+    text = text.replace(/&#x([0-9a-fA-F]+);/g, function (match, hex) {
         var codePoint = parseInt(hex, 16);
         if (codePoint > 0 && codePoint <= 0x10FFFF) {
             try {
@@ -70,10 +70,10 @@ function decodeHtmlEntitiesRobust(text) {
 
     // Decodificar las entidades XML básicas al final para evitar conflictos.
     text = text.replace(/&quot;/g, '"')
-               .replace(/&apos;/g, "'")
-               .replace(/&lt;/g, '<')
-               .replace(/&gt;/g, '>')
-               .replace(/&amp;/g, '&');
+        .replace(/&apos;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
 
     return text;
 }
@@ -162,7 +162,7 @@ export function formatDescriptionForTooltip(htmlText) {
 
     let decoded = decodeHtmlEntities(htmlText);
     let plainText = decoded.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    
+
     const maxLength = 300;
     return smartTruncate(plainText, maxLength);
 }
@@ -189,15 +189,20 @@ function parseItemsFromRegex(xml, itemRegex, titleRegex, linkRegex, guidRegex, p
             var summary = formatDescriptionForTooltip(description);
 
             var isNew = false;
+            // Use link as unique identifier (more stable than title)
+            var uniqueId = link || title; // Fallback to title if no link
+
             if (!feedTimestamps[feedUrl]) {
                 feedTimestamps[feedUrl] = {};
                 isNew = true;
-            } else if (!feedTimestamps[feedUrl][title] || pubDate > feedTimestamps[feedUrl][title]) {
+            } else if (!feedTimestamps[feedUrl][uniqueId]) {
+                // We've never seen this link before
                 isNew = true;
             }
+            // If we've seen this link before, it's not new (even if pubDate changed)
 
             feedTimestamps[feedUrl] = feedTimestamps[feedUrl] || {};
-            feedTimestamps[feedUrl][title] = pubDate;
+            feedTimestamps[feedUrl][uniqueId] = pubDate;
 
             newItems.push({
                 title: title,
@@ -252,15 +257,20 @@ function parseRssMultiline(xml, feedUrl, maxItems, feedTimestamps) {
                 var summary = formatDescriptionForTooltip(description);
 
                 var isNew = false;
+                // Use link as unique identifier (more stable than title)
+                var uniqueId = link || title; // Fallback to title if no link
+
                 if (!feedTimestamps[feedUrl]) {
                     feedTimestamps[feedUrl] = {};
                     isNew = true;
-                } else if (!feedTimestamps[feedUrl][title] || pubDate > feedTimestamps[feedUrl][title]) {
+                } else if (!feedTimestamps[feedUrl][uniqueId]) {
+                    // We've never seen this link before
                     isNew = true;
                 }
+                // If we've seen this link before, it's not new (even if pubDate changed)
 
                 feedTimestamps[feedUrl] = feedTimestamps[feedUrl] || {};
-                feedTimestamps[feedUrl][title] = pubDate;
+                feedTimestamps[feedUrl][uniqueId] = pubDate;
 
                 newItems.push({ title: title, link: link, description: description, summary: summary, isNew: isNew, isLast: false });
             }

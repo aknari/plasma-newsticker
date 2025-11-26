@@ -50,14 +50,27 @@ Kirigami.Page {
             Kirigami.FormLayout {
                 Layout.fillWidth: true
 
-                QQC2.SpinBox {
-                    id: scrollSpeedSpinBox
+                ColumnLayout {
                     Kirigami.FormData.label: i18n("Scroll Speed:")
-                    from: 10
-                    to: 100
-                    stepSize: 5
-                    value: cfg_scrollSpeed
-                    onValueChanged: cfg_scrollSpeed = value
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 282
+                    
+                    QQC2.Slider {
+                        id: scrollSpeedSlider
+                        Layout.fillWidth: true
+                        from: 10
+                        to: 100
+                        stepSize: 5
+                        value: cfg_scrollSpeed
+                        onValueChanged: cfg_scrollSpeed = value
+                    }
+                    
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        text: i18n("Current: %1 px/s", Math.round(scrollSpeedSlider.value))
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        opacity: 0.7
+                    }
                 }
 
                 QQC2.Switch {

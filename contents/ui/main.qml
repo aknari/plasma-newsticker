@@ -341,7 +341,10 @@ PlasmoidItem {
         root.faviconOpacity = 0;
         root.currentFaviconUrl = "image://icon/applications-internet";
         currentFeedIndex = 0;
-        feedTimestamps = ({});
+        // Only reset feedTimestamps on manual reset (not retry), to preserve "seen" items
+        if (!isRetry) {
+            feedTimestamps = ({});
+        }
         isInitialized = false;
         allFeedsFailed = false;
         failedFeedAttempts = 0;
@@ -443,8 +446,20 @@ PlasmoidItem {
                     startTransitionAnimations(1.0);
                 }
                 function stopAnimations() {
-                    faviconOpacityAnimation.stop();
-                    newsOpacityAnimation.stop();
+                    try {
+                        if (faviconOpacityAnimation && typeof faviconOpacityAnimation.stop === 'function') {
+                            faviconOpacityAnimation.stop();
+                        }
+                    } catch (e) {
+                        if (_debugMode) console.warn("Error stopping faviconOpacityAnimation:", e);
+                    }
+                    try {
+                        if (newsOpacityAnimation && typeof newsOpacityAnimation.stop === 'function') {
+                            newsOpacityAnimation.stop();
+                        }
+                    } catch (e) {
+                        if (_debugMode) console.warn("Error stopping newsOpacityAnimation:", e);
+                    }
                 }
                 function startTransitionAnimations(targetOpacity) {
                     faviconOpacityAnimation.to = targetOpacity;
@@ -641,7 +656,9 @@ PlasmoidItem {
         target: plasmoid.configuration
         
         function onScrollSpeedChanged() {
-            if (!newsMouseArea.containsMouse) currentScrollSpeed = plasmoid.configuration.scrollSpeed
+            // Update currentScrollSpeed immediately
+            // If mouse is hovering, it will be reset to slowScrollSpeed by onPositionChanged
+            root.currentScrollSpeed = plasmoid.configuration.scrollSpeed;
         }
         function onShowTooltipsChanged() {
             if (!plasmoid.configuration.showTooltips) {
