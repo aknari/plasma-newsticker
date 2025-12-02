@@ -172,6 +172,8 @@ PlasmoidItem {
     function loadCurrentFeed() {
         if (!feedList || feedList.length === 0) {
             isInitialized = false;
+            console.warn("loadCurrentFeed: feedList vacío inesperadamente. Programando reintento.");
+            scheduleRetry();
             return;
         }
         if (currentFeedIndex >= feedList.length) currentFeedIndex = 0;
@@ -367,6 +369,8 @@ PlasmoidItem {
         if (feeds && feeds.length > 0 && feeds.some(feed => feed && feed.trim() !== '')) {
             if (_debugMode) console.log("✅ Feeds encontrados. Iniciando carga del primer feed.");
             isInitialized = true;
+            // Iniciamos el watchdog aquí también para proteger la PRIMERA carga
+            watchdogTimer.start();
             // Damos un pequeño respiro antes de cargar para dejar que el loop de eventos procese
             Qt.callLater(loadCurrentFeed);
         } else {
@@ -664,6 +668,15 @@ PlasmoidItem {
             if (!plasmoid.configuration.showTooltips) {
                 root.toolTipMainText = "";
                 root.toolTipSubText = "";
+            }
+        }
+        function onFeedListChanged() {
+            // If we are currently showing "No feeds configured" but now we have feeds, initialize.
+            // This handles the case where config loads asynchronously after Component.onCompleted
+            const feeds = plasmoid.configuration.feedList;
+            if (root.allFeedsFailed && feeds && feeds.length > 0 && feeds.some(feed => feed && feed.trim() !== '')) {
+                if (_debugMode) console.log("✅ Detectada lista de feeds (carga tardía). Inicializando...");
+                resetAndInitialize(false);
             }
         }
     }
