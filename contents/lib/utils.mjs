@@ -357,30 +357,97 @@ export function parseFeedWithMultipleStrategies(xml, feedUrl, maxItems, feedTime
 
 // --- Sección de Utilidades de Favicon ---
 
-export function getFaviconUrlCandidates(feedUrl, size = 32) { // Aceptamos un parámetro de tamaño
-    if (!feedUrl || !size) {
-        return [];
-    }
-
-    try {
-        var domain = feedUrl.replace(/^https?:\/\//, '').split('/')[0];
-
-        // Manejar dominios especiales conocidos
-        if (domain.includes("bbci.co.uk") || domain.includes("feeds.bbci.co.uk")) {
-            domain = "bbc.co.uk";
-        } else if (domain.includes("elpais.com")) {
-            domain = "elpais.com";
+// Nueva función para buscar el mejor favicon usando la API de Teamtailor
+export function fetchFaviconFromTeamtailor(domain, targetSize) {
+    return new Promise((resolve) => {
+        if (!domain || !targetSize) {
+            resolve(null);
+            return;
         }
 
-        // Devolver la lista de candidatos en orden de preferencia
-        return [
-            "https://logo.clearbit.com/" + domain + "?size=" + size,
-            "https://www.google.com/s2/favicons?domain=" + domain + "&sz=" + size,
-            "https://favicon.yandex.net/favicon/" + domain,
-            "https://" + domain + "/favicon.ico"
-        ];
-    } catch (e) {
-        console.error("Error generando candidatos de favicon para:", feedUrl, e);
+        const apiUrl = `https://favicons.teamtailor-cdn.com/allicons.json?url=${domain}`;
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", apiUrl);
+        xhr.setRequestHeader("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
+
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data && data.icons && data.icons.length > 0) {
+                            let bestIcon = null;
+                            let minSizeDiff = Infinity;
+
+                            for (const icon of data.icons) {
+                                if (icon.url && icon.sizes) {
+                                    const sizeStr = icon.sizes.split('x')[0];
+                                    const size = parseInt(sizeStr, 10);
+                                    if (!isNaN(size)) {
+                                        const diff = Math.abs(size - targetSize);
+                                        if (diff < minSizeDiff) {
+                                            minSizeDiff = diff;
+                                            bestIcon = icon;
+                                        }
+                                        // Si encontramos el tamaño exacto, lo usamos
+                                        if (diff === 0) break;
+                                    }
+                                }
+                            }
+                            
+                            if(bestIcon) {
+                                resolve(bestIcon.url);
+                            } else {
+                                // Si ninguno tiene tamaño, cogemos el primero
+                                resolve(data.icons[0].url);
+                            }
+
+                        } else {
+                            resolve(null);
+                        }
+                    } catch (e) {
+                        console.error("Error parseando JSON de Teamtailor:", e);
+                        resolve(null);
+                    }
+                } else {
+                    resolve(null);
+                }
+            }
+        };
+        xhr.onerror = function() {
+            console.error("Error de red con la API de Teamtailor");
+            resolve(null);
+        };
+        xhr.send();
+    });
+}
+
+
+export function normalizeDomain(originalDomain) {
+    const ignoredSubdomains = ['feeds', 'rss', 'news', 'api', 'feed', 'atom'];
+    const parts = originalDomain.split('.');
+
+    if (parts.length > 2) {
+        const subdomain = parts[0];
+        if (ignoredSubdomains.includes(subdomain)) {
+            const rootDomain = parts.slice(1).join('.');
+            // Devolver el dominio raíz y la versión con 'www' como candidatos
+            return [rootDomain, 'www.' + rootDomain];
+        }
+    }
+    
+    // Si no hay subdominio o no está en la lista, devolver solo el original
+    return [originalDomain];
+}
+
+export function getFaviconUrlCandidates(domain, size = 32) {
+    if (!domain || !size) {
         return [];
     }
+    // Devolver la lista de candidatos en orden de preferencia
+    return [
+        "https://www.google.com/s2/favicons?domain=" + domain + "&sz=" + size,
+        "https://favicon.yandex.net/favicon/" + domain,
+        "https://" + domain + "/favicon.ico"
+    ];
 }

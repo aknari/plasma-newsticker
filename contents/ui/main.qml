@@ -110,34 +110,84 @@ PlasmoidItem {
     }
 
     // --- Lógica ---
-    function findValidFavicon(candidates) {
+    function findValidFavicon(feedUrl) {
         return new Promise((resolve) => {
-            let currentIndex = 0;
-            function tryNext() {
-                if (currentIndex >= candidates.length) {
+            const originalDomain = feedUrl.replace(/^https?:\/\//, '').split('/')[0];
+            const domainCandidates = Utils.normalizeDomain(originalDomain);
+
+            function tryDomain(domainIndex) {
+                if (domainIndex >= domainCandidates.length) {
+                    if (_debugMode) console.log(`[Favicon] ❌ Todos los dominios y métodos fallaron para ${originalDomain}.`);
                     resolve(null);
                     return;
                 }
-                const url = candidates[currentIndex];
-                var img = Qt.createQmlObject('import QtQuick 2.0; Image { visible: false }', root, "dynamicImage");
-                img.source = url;
-                img.statusChanged.connect(function() {
-                    if (img.status === Image.Ready) {
-                        const aspectRatio = img.width / img.height;
-                        if (aspectRatio >= 0.5 && aspectRatio <= 2.0) {
-                            resolve(url);
-                        } else {
-                            currentIndex++;
-                            tryNext();
+
+                const currentDomain = domainCandidates[domainIndex];
+                if (_debugMode) console.log(`[Favicon] 🔍 Probando dominio: ${currentDomain}`);
+
+                // 1. Probar con Teamtailor para el dominio actual
+                Utils.fetchFaviconFromTeamtailor(currentDomain, root.optimalFaviconSize)
+                    .then(teamtailorUrl => {
+                        if (teamtailorUrl) {
+                            return validateImageUrl(teamtailorUrl).then(isValid => isValid ? teamtailorUrl : null);
                         }
-                    } else if (img.status === Image.Error) {
-                        currentIndex++;
-                        tryNext();
+                        return null;
+                    })
+                    .then(validUrl => {
+                        if (validUrl) {
+                            if (_debugMode) console.log(`[Favicon] ✅ Éxito con Teamtailor para ${currentDomain}`);
+                            resolve(validUrl);
+                        } else {
+                             if (_debugMode) console.log(`[Favicon] ℹ️ Teamtailor falló para ${currentDomain}. Usando respaldos.`);
+                            // 2. Si Teamtailor falla, usar los candidatos de respaldo
+                            const backupCandidates = Utils.getFaviconUrlCandidates(currentDomain, root.optimalFaviconSize);
+                            tryNextBackup(0, backupCandidates);
+                        }
+                    });
+
+                function tryNextBackup(backupIndex, backupCandidates) {
+                    if (backupIndex >= backupCandidates.length) {
+                        // Si todos los respaldos para este dominio fallan, probar el siguiente dominio
+                        tryDomain(domainIndex + 1);
+                        return;
                     }
-                    if (img.status !== Image.Loading) img.destroy();
-                });
+                    const candidateUrl = backupCandidates[backupIndex];
+                    validateImageUrl(candidateUrl).then(isValid => {
+                        if (isValid) {
+                            if (_debugMode) console.log(`[Favicon] ✅ Éxito con respaldo (${candidateUrl})`);
+                            resolve(candidateUrl);
+                        } else {
+                            tryNextBackup(backupIndex + 1, backupCandidates);
+                        }
+                    });
+                }
             }
-            tryNext();
+
+            tryDomain(0); // Empezar con el primer dominio candidato
+        });
+    }
+
+    // Función auxiliar para validar si una URL de imagen es válida y tiene la proporción correcta
+    function validateImageUrl(url) {
+        return new Promise((resolve) => {
+            if (!url) {
+                resolve(false);
+                return;
+            }
+            var img = Qt.createQmlObject('import QtQuick 2.0; Image { visible: false }', root, "dynamicImage");
+            img.source = url;
+            img.statusChanged.connect(function() {
+                if (img.status === Image.Ready) {
+                    const aspectRatio = img.width / img.height;
+                    resolve(aspectRatio >= 0.5 && aspectRatio <= 2.0);
+                } else if (img.status === Image.Error) {
+                    resolve(false);
+                }
+                // Solo destruir si no está cargando, para evitar problemas
+                if (img.status !== Image.Loading) {
+                    img.destroy();
+                }
+            });
         });
     }
 
@@ -205,8 +255,7 @@ PlasmoidItem {
             if (_debugMode) console.log("[DEBUG] loadFeed: .then() ejecutado. Contenido recibido:", !!content);
             if (content) {
                 if (findFaviconNow) {
-                    const candidates = Utils.getFaviconUrlCandidates(feedUrl, root.optimalFaviconSize);
-                    findValidFavicon(candidates).then(validFavicon => {
+                    findValidFavicon(feedUrl).then(validFavicon => {
                         const faviconUrl = validFavicon || "image://icon/applications-internet";
                         if (_debugMode) console.log("[DEBUG] loadFeed: Favicon encontrado/resuelto. Llamando a parseFeed.");
                         parseFeed(content, feedUrl, faviconUrl);
@@ -234,7 +283,7 @@ PlasmoidItem {
         }
         if (_debugMode) console.log(`⚡️ [CHIVATO] Intentando precargar: ${nextFeedUrl}`);
         const feedContentPromise = Network.fetchFeed(nextFeedUrl);
-        const validFaviconPromise = findValidFavicon(Utils.getFaviconUrlCandidates(nextFeedUrl, root.optimalFaviconSize));
+        const validFaviconPromise = findValidFavicon(nextFeedUrl);
         Promise.all([feedContentPromise, validFaviconPromise]).then(results => {
             const feedContent = results[0];
             const validFaviconUrl = results[1];
@@ -581,7 +630,7 @@ PlasmoidItem {
                             if (!newsRow || newsRow.totalWidth <= 0) return;
                             // frameTime is in seconds
                             var pixelsToMove = root.currentScrollSpeed * frameTime;
-                            var endOfScroll = newsRow.x + newsRow.totalWidth < -50;
+                            var endOfScroll = newsRow.x + newsRow.width < 0;
                             var minTimeElapsed = (new Date().getTime() - feedStartTime >= minDisplayTime);
 
                             if (endOfScroll && !isBusy && hasValidContent && minTimeElapsed) {
