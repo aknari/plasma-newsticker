@@ -75,6 +75,7 @@ PlasmoidItem {
     readonly property int newsSeparatorMargin: Kirigami.Units.gridUnit * 1.2
     property bool horizontal: Plasmoid.formFactor !== 2 // 2 is Vertical in Plasma::Types::FormFactor
     property bool expanding: plasmoid.configuration.expanding || false
+    property bool currentFeedIsRtl: false
 
     property GridLayout panelLayout: {
         let candidate = root.parent;
@@ -334,6 +335,11 @@ PlasmoidItem {
 
     function setupNewsModel(items, feedUrl, faviconUrl) {
         if (_debugMode) console.log(`[CHIVATO] setupNewsModel: Iniciando con ${items.length} items.`);
+        
+        // Detectar si el feed es RTL basándose en los títulos de las noticias
+        currentFeedIsRtl = items.some(item => Utils.isRtl(item.title));
+        if (_debugMode) console.log(`[CHIVATO] setupNewsModel: RTL detectado = ${currentFeedIsRtl}`);
+
         currentFaviconUrl = faviconUrl;
         emptyStateMessage = ""; // Limpiamos el mensaje de error si hemos tenido éxito
         failedFeedAttempts = 0;
@@ -461,7 +467,7 @@ PlasmoidItem {
     Timer { id: retryFailedFeedsTimer; repeat: false; onTriggered: resetAndInitialize(true) }
     Timer {
         id: watchdogTimer
-        interval: 30000 // Aumentamos a 30 segundos para dar más margen en redes lentas
+        interval: 20000 // Reducido a 20 segundos. Con los nuevos timeouts de red de 10s, es suficiente.
         repeat: false
         onTriggered: {
             console.warn("🐶 [WATCHDOG] La transición del feed no se completó a tiempo. Forzando reinicio completo.");
@@ -495,7 +501,7 @@ PlasmoidItem {
                 function stopScrolling() { scrollAnimation.stop(); }
                 function startScrolling() { if (_debugMode) console.log("[CHIVATO] tickerUiComponent: Arrancando scrollAnimation."); scrollAnimation.start(); }
                 function updateNewsRow() {
-                    newsRow.x = newsContainer.width;
+                    newsRow.x = root.currentFeedIsRtl ? -newsRow.totalWidth : newsContainer.width;
                     startTransitionAnimations(1.0);
                 }
                 function stopAnimations() {
@@ -523,7 +529,10 @@ PlasmoidItem {
 
                 // Elementos Visuales
                 Item {
-                    id: faviconContainer; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                    id: faviconContainer
+                    anchors.left: !root.currentFeedIsRtl ? parent.left : undefined
+                    anchors.right: root.currentFeedIsRtl ? parent.right : undefined
+                    anchors.verticalCenter: parent.verticalCenter
                     height: root.height; width: root.optimalFaviconSize; visible: root.showIcons; opacity: root.faviconOpacity
                     Rectangle {
                         id: faviconClip; anchors.fill: parent; color: "transparent"; clip: true
@@ -536,9 +545,12 @@ PlasmoidItem {
                     NumberAnimation { id: faviconOpacityAnimation; target: faviconContainer; property: "opacity"; duration: 300; easing.type: Easing.InOutQuad }
                 }
                 Rectangle {
-                    id: newsContainer; anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom
-                    anchors.left: root.showIcons ? faviconContainer.right : parent.left
-                    anchors.leftMargin: root.showIcons ? Kirigami.Units.smallSpacing : 0
+                    id: newsContainer
+                    anchors.top: parent.top; anchors.bottom: parent.bottom
+                    anchors.left: !root.currentFeedIsRtl ? (root.showIcons ? faviconContainer.right : parent.left) : parent.left
+                    anchors.right: root.currentFeedIsRtl ? (root.showIcons ? faviconContainer.left : parent.right) : parent.right
+                    anchors.leftMargin: (!root.currentFeedIsRtl && root.showIcons) ? Kirigami.Units.smallSpacing : 0
+                    anchors.rightMargin: (root.currentFeedIsRtl && root.showIcons) ? Kirigami.Units.smallSpacing : 0
                     color: "transparent"; clip: true; opacity: faviconContainer.opacity
                     MouseArea {
                         id: newsMouseArea; anchors.fill: parent; hoverEnabled: root.showTooltips
@@ -580,11 +592,18 @@ PlasmoidItem {
                         }
                     }
                     Row {
-                        id: newsRow; height: parent.height; x: newsContainer.width
+                        id: newsRow; height: parent.height; x: root.currentFeedIsRtl ? -totalWidth : newsContainer.width
+                        layoutDirection: root.currentFeedIsRtl ? Qt.RightToLeft : Qt.LeftToRight
                         property real totalWidth: {
-                            var width = 0;
-                            for (var i = 0; i < children.length; i++) width += children[i].width + spacing;
-                            return width;
+                            var w = 0;
+                            const childCount = children.length;
+                            for (var i = 0; i < childCount; i++) {
+                                if (children[i].visible) {
+                                    w += children[i].width;
+                                    if (i < childCount - 1) w += spacing;
+                                }
+                            }
+                            return w;
                         }
                         Repeater {
                             id: newsRepeater; model: root.newsModel
@@ -593,6 +612,7 @@ PlasmoidItem {
                                 visible: modelData && modelData.title && modelData.title.length > 0
                                 Row {
                                     id: contentRow; height: parent.height; spacing: Kirigami.Units.smallSpacing
+                                    layoutDirection: root.currentFeedIsRtl ? Qt.RightToLeft : Qt.LeftToRight
                                     PlasmaComponents.Label {
                                         id: titleText; text: modelData.title || ""; color: root.textColor
                                         font { pointSize: root.fontSize; family: root.fontFamily; bold: modelData.isNew && !root.blinkNewItems }
@@ -630,7 +650,16 @@ PlasmoidItem {
                             if (!newsRow || newsRow.totalWidth <= 0) return;
                             // frameTime is in seconds
                             var pixelsToMove = root.currentScrollSpeed * frameTime;
-                            var endOfScroll = newsRow.x + newsRow.width < 0;
+                            
+                            // Si es RTL, nos movemos a la derecha (x aumenta)
+                            // Si es LTR, nos movemos a la izquierda (x disminuye)
+                            var delta = root.currentFeedIsRtl ? pixelsToMove : -pixelsToMove;
+                            
+                            // Fin de scroll:
+                            // En LTR: cuando el borde derecho (x + totalWidth) es < 0
+                            // En RTL: cuando el borde izquierdo (x) es > ancho del contenedor
+                            var endOfScroll = root.currentFeedIsRtl ? (newsRow.x > newsContainer.width) : (newsRow.x + newsRow.totalWidth < 0);
+                            
                             var minTimeElapsed = (new Date().getTime() - feedStartTime >= minDisplayTime);
 
                             if (endOfScroll && !isBusy && hasValidContent && minTimeElapsed) {
@@ -642,7 +671,7 @@ PlasmoidItem {
                                     // Usamos un temporizador para no inundar el log
                                     if (!scrollDebugTimer.running) scrollDebugTimer.start();
                                 }
-                                newsRow.x -= pixelsToMove;
+                                newsRow.x += delta;
                             }
                         }
                     }

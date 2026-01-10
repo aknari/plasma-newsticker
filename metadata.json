@@ -2,7 +2,7 @@
     "KPlugin": {
         "Authors": [
             {
-                "Email": "tomas.bautista@gmail.com", 
+                "Email": "tomas.bautista@gmail.com",
                 "Url": "https://github.com/aknari",
                 "Name": "T. Bautista"
             }
@@ -25,7 +25,7 @@
         "Id": "org.kde.plasma.newsticker",
         "License": "GPL",
         "Name": "News Ticker",
-        "Version": "1.6",
+        "Version": "1.7",
         "Website": "https://github.com/aknari/plasma-newsticker"
     },
     "KPackageStructure": "Plasma/Applet",

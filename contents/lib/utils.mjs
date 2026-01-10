@@ -2,6 +2,13 @@
 
 // --- Sección de Procesamiento de Texto Internacional ---
 
+export function isRtl(text) {
+    if (!text) return false;
+    // Rangos de caracteres RTL: Hebreo, Árabe, Siríaco, Thaana, etc.
+    const rtlChars = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/;
+    return rtlChars.test(text);
+}
+
 function createHtml5EntityDecoder() {
     return {
         '&nbsp;': ' ',
@@ -370,7 +377,7 @@ export function fetchFaviconFromTeamtailor(domain, targetSize) {
         xhr.open("GET", apiUrl);
         xhr.setRequestHeader("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
 
-        xhr.onreadystatechange = function() {
+        xhr.onreadystatechange = function () {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status === 200) {
                     try {
@@ -394,8 +401,8 @@ export function fetchFaviconFromTeamtailor(domain, targetSize) {
                                     }
                                 }
                             }
-                            
-                            if(bestIcon) {
+
+                            if (bestIcon) {
                                 resolve(bestIcon.url);
                             } else {
                                 // Si ninguno tiene tamaño, cogemos el primero
@@ -414,7 +421,15 @@ export function fetchFaviconFromTeamtailor(domain, targetSize) {
                 }
             }
         };
-        xhr.onerror = function() {
+
+        // Timeout de 5 segundos para la API de favicons
+        xhr.timeout = 5000;
+        xhr.ontimeout = function () {
+            console.warn("[Favicon] Timeout alcanzado para la API de Teamtailor.");
+            resolve(null);
+        };
+
+        xhr.onerror = function () {
             console.error("Error de red con la API de Teamtailor");
             resolve(null);
         };
@@ -435,7 +450,7 @@ export function normalizeDomain(originalDomain) {
             return [rootDomain, 'www.' + rootDomain];
         }
     }
-    
+
     // Si no hay subdominio o no está en la lista, devolver solo el original
     return [originalDomain];
 }
